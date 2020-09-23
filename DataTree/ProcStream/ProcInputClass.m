@@ -506,6 +506,12 @@ classdef ProcInputClass < handle
             if nargin==1
                 return;
             end
+            % Ensure that there is an array declared for each cond name
+            if length(obj.stimStatus) ~= length(CondNames)
+               for i = (length(obj.stimStatus) + 1):length(CondNames)
+                    obj.stimStatus{i} = [];
+               end
+            end
             obj.acquired.SetConditions(CondNames);
         end
         
