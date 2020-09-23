@@ -1239,7 +1239,7 @@ classdef ProcStreamClass < handle
             if ~exist('iBlk','var')
                 iBlk = [];
             end
-            tIncAuto = obj.output.GetVar('tIncAuto', iBlk);
+            tIncAuto = obj.output.GetVar('tIncAuto', iBlk);  % TODO implement a getter in ProcResultClass
         end
         
 
@@ -1248,16 +1248,16 @@ classdef ProcStreamClass < handle
             if ~exist('iBlk','var')
                 iBlk = [];
             end
-            tIncAutoCh = obj.output.GetVar('tIncAutoCh', iBlk);
+            tIncAutoCh = obj.output.GetVar('tIncAutoCh', iBlk);  % TODO implement a getter in ProcResultClass
         end
         
 
         % ----------------------------------------------------------------------------------
         function mlActMan = GetMeasListActMan(obj, iBlk)
             if ~exist('iBlk','var')
-                iBlk = [];
+                iBlk = 1;
             end
-            mlActMan = obj.input.GetVar('mlActMan',iBlk);
+            mlActMan = obj.input.GetMeasListActMan(iBlk);  % TODO implement a getter in ProcInputClass
         end
         
         
@@ -1266,16 +1266,16 @@ classdef ProcStreamClass < handle
             if ~exist('iBlk','var')
                 iBlk = [];
             end
-            mlActAuto = obj.output.GetVar('mlActAuto',iBlk);
+            mlActAuto = obj.output.GetVar('mlActAuto',iBlk);  % TODO implement a getter in ProcResultClass
         end
 
         
         % ----------------------------------------------------------------------------------
         function mlVis = GetMeasListVis(obj, iBlk)
             if ~exist('iBlk','var')
-                iBlk = [];
+                iBlk = 1;
             end
-            mlVis = obj.input.GetVar('mlVis',iBlk);
+            mlVis = obj.input.GetMeasListVis(iBlk);  % TODO implement a getter in ProcInputClass
         end
 
         
@@ -1284,7 +1284,7 @@ classdef ProcStreamClass < handle
             if ~exist('iBlk','var')
                 iBlk = [];
             end
-            pValues = obj.output.GetVar('pValues',iBlk);
+            pValues = obj.output.GetVar('pValues',iBlk);  % TODO implement a getter in ProcResultClass
         end
     
         
@@ -1354,10 +1354,10 @@ classdef ProcStreamClass < handle
         
         
         % ----------------------------------------------------------------------------------
-        function [tpts, duration, vals] = GetStimData(obj, icond)
+        function [tpts, duration, amps] = GetStimData(obj, icond)
             tpts     = obj.GetStimTpts(icond);
             duration = obj.GetStimDuration(icond);
-            vals     = obj.GetStimValues(icond);
+            amps     = obj.GetStimAmplitudes(icond);
         end
         
     
@@ -1389,22 +1389,21 @@ classdef ProcStreamClass < handle
             end
             duration = obj.input.GetStimDuration(icond);
         end
-        
+
         
         % ----------------------------------------------------------------------------------
-        function SetStimValues(obj, icond, vals)
-            obj.input.SetStimValues(icond, vals);
+        function SetStimAmplitudes(obj, icond, amps)
+            obj.input.SetStimAmplitudes(icond, amps);
         end
         
     
         % ----------------------------------------------------------------------------------
-        function vals = GetStimValues(obj, icond)
+        function amps = GetStimAmplitudes(obj, icond)
             if ~exist('icond','var')
                 icond=1;
             end
-            vals = obj.input.GetStimValues(icond);
+            amps = obj.input.GetStimAmplitudes(icond);
         end
-                       
         
         % ---------------------------------------------------------
         function CondNames = GetConditions(obj)

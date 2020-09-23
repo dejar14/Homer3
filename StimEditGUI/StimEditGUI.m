@@ -291,7 +291,11 @@ end
 % Now that we made sure legit dataTree exists, we can match up
 % the selected stims to the stims in currElem
 t = stimEdit.dataTree.currElem.GetTimeCombined();
-s = stimEdit.dataTree.currElem.GetStims(t);
+s = stimEdit.dataTree.currElem.GetStimStatus(t);
+if isempty(s) || isempty(t)
+   stims_select = [];
+   return
+end
 s2 = sum(abs(s(tPts_idxs_select,:)),2);
 stims_select = find(s2>=1);
 
@@ -552,7 +556,7 @@ function SetStimData(icond, data)
 global stimEdit
 stimEdit.dataTree.currElem.SetStimTpts(icond, data(:,1));
 stimEdit.dataTree.currElem.SetStimDuration(icond, data(:,2));
-stimEdit.dataTree.currElem.SetStimValues(icond, data(:,3));
+stimEdit.dataTree.currElem.SetStimAmplitudes(icond, data(:,3));
 
 
 % -------------------------------------------------------------------
@@ -599,7 +603,7 @@ Save()
 
 % -------------------------------------------------------------------
 function StimEditGUI_DeleteFcn(hObject, eventdata, handles)
-Save()
+% pass
 
 
 % --------------------------------------------------------------------
@@ -730,8 +734,8 @@ iG = stimEdit.dataTree.GetCurrElemIndexID();
 CondNamesGroup = stimEdit.dataTree.groups(iG).GetConditions();
 CondColTbl     = stimEdit.dataTree.groups(iG).CondColTbl();
 t              = stimEdit.dataTree.currElem.GetTimeCombined();
-s              = stimEdit.dataTree.currElem.GetStims(t);
-stimVals       = stimEdit.dataTree.currElem.GetStimValSettings();
+s              = stimEdit.dataTree.currElem.GetStimStatus(t);
+stimStatuses   = stimEdit.dataTree.currElem.GetstimStatusSettings();
 
 % Aux preview
 if get(handles.checkboxPreview, 'Value')  % If preview is enabled, plot
@@ -757,7 +761,7 @@ if get(handles.checkboxPreview, 'Value')  % If preview is enabled, plot
     set(handles.pushbuttonGenerate, 'String', ['Generate ', nmarks, ' stim marks']);
 end
 
-[lstR,lstC] = find(abs(s) ~= stimVals.none);
+[lstR,lstC] = find(abs(s) ~= stimStatuses.none);
 [lstR,k] = sort(lstR);
 lstC = lstC(k);
 nStim = length(lstR);
@@ -767,11 +771,11 @@ idxLg=[];
 hLg=[];
 kk=1;
 for ii=1:nStim
-    if(s(lstR(ii),lstC(ii))==stimVals.incl)
+    if(s(lstR(ii),lstC(ii))==stimStatuses.incl)
         linestyle = '-';
-    elseif(s(lstR(ii),lstC(ii))==stimVals.excl_manual)
+    elseif(s(lstR(ii),lstC(ii))==stimStatuses.excl_manual)
         linestyle = '--';
-    elseif(s(lstR(ii),lstC(ii))==stimVals.excl_auto)
+    elseif(s(lstR(ii),lstC(ii))==stimStatuses.excl_auto)
         linestyle = '-.';
     else
         linestyle = '-';
@@ -835,16 +839,18 @@ icond = find(strcmp(conditions, condition));
 if isempty(icond)
     return;
 end
-[tpts, duration, vals] = stimEdit.dataTree.currElem.GetStimData(icond);
+[tpts, duration, amps] = stimEdit.dataTree.currElem.GetStimData(icond);
+states = stimEdit.dataTree.currElem.GetStimStatusCond(icond);
 if isempty(tpts)
     set(handles.uitableStimInfo, 'data',[]);
     return;
 end
 [~,idx] = sort(tpts);
-data = zeros(length(tpts),3);
+data = zeros(length(tpts),4);
 data(:,1) = tpts(idx);
 data(:,2) = duration(idx);
-data(:,3) = vals(idx);
+data(:,3) = amps(idx);
+data(:,4) = states(idx, 2);
 set(handles.uitableStimInfo, 'data',data);
 
 
@@ -902,16 +908,21 @@ currAux = stimEdit.dataTree.currElem.acquired.aux(iaux);
                                          handles.editLPF.Value,...             % LPF window width
                                          handles.radiobuttonRisingEdge.Value); % rising vs falling
 % Add stim to dataTree element
-cond = char(handles.listboxAuxSelect.String(handles.listboxAuxSelect.Value));
+cond = char(handles.listboxAuxSelect.String(iaux));
 for i = 1:length(onsets)
     stimEdit.dataTree.currElem.AddStims(onsets(i), cond);
 end
+conditions =  stimEdit.dataTree.currElem.GetConditions();
+icond = find(strcmp(conditions, cond));
 iG = stimEdit.dataTree.GetCurrElemIndexID();
 stimEdit.dataTree.groups(iG).SetConditions();
+stimEdit.dataTree.currElem.SetStimDuration(icond, handles.editDuration.Value);
+stimEdit.dataTree.currElem.SetStimAmplitudes(icond, handles.editAmplitude.Value);
 if ~isempty(stimEdit.updateParentGui)
     stimEdit.updateParentGui('StimEditGUI', 'close');
 end
 Display(handles);
+msgbox(['Generated ', num2str(length(onsets)), ' stims from ', cond], 'Stims generated');
     
 
 % --------------------------------------------------------------------
@@ -978,6 +989,15 @@ hObject.Value = floor(str2double(hObject.String));
 
 % --------------------------------------------------------------------
 function editDuration_Callback(hObject, eventdata, handles)
+val = str2double(hObject.String);
+if isnan(val)
+   set(hObject ,'String', hObject.Value);
+else
+    hObject.Value = val;
+end
+
+
+function editAmplitude_Callback(hObject, eventdata, handles)
 val = str2double(hObject.String);
 if isnan(val)
    set(hObject ,'String', hObject.Value);

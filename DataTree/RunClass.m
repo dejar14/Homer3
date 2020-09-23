@@ -430,9 +430,9 @@ classdef RunClass < TreeNodeClass
         
         
         % ----------------------------------------------------------------------------------
-        function s = GetStims(obj, t)            
+        function s = GetStimStatus(obj, t)            
             % Proc stream output 
-            s_inp = obj.procStream.input.GetStims(t);
+            s_inp = obj.procStream.input.GetStimStatusTimeSeries(t);
             s_out = obj.procStream.output.GetStims(t);
             
             k_inp_all  = find(s_inp~=0);
@@ -619,10 +619,10 @@ classdef RunClass < TreeNodeClass
         
         
         % ----------------------------------------------------------------------------------
-        function [tpts, duration, vals] = GetStimData(obj, icond)
+        function [tpts, duration, amps] = GetStimData(obj, icond)
             tpts     = obj.GetStimTpts(icond);
             duration = obj.GetStimDuration(icond);
-            vals     = obj.GetStimValues(icond);
+            amps     = obj.GetStimAmplitudes(icond);
         end
         
     
@@ -640,6 +640,10 @@ classdef RunClass < TreeNodeClass
             tpts = obj.procStream.GetStimTpts(icond);
         end
         
+        % ----------------------------------------------------------------------------------
+        function status = GetStimStatusCond(obj, icond)
+            status = obj.procStream.input.GetStimStatus(icond);
+        end
         
         % ----------------------------------------------------------------------------------
         function SetStimDuration(obj, icond, duration)
@@ -657,17 +661,17 @@ classdef RunClass < TreeNodeClass
         
         
         % ----------------------------------------------------------------------------------
-        function SetStimValues(obj, icond, vals)
-            obj.procStream.SetStimValues(icond, vals);
+        function SetStimAmplitudes(obj, icond, amps)
+            obj.procStream.SetStimAmplitudes(icond, amps);
         end
         
     
         % ----------------------------------------------------------------------------------
-        function vals = GetStimValues(obj, icond)
+        function amps = GetStimAmplitudes(obj, icond)
             if ~exist('icond','var')
                 icond=1;
             end
-            vals = obj.procStream.GetStimValues(icond);
+            amps = obj.procStream.GetStimAmplitudes(icond);
         end
         
         
@@ -711,8 +715,8 @@ classdef RunClass < TreeNodeClass
         
         
         % ----------------------------------------------------------------------------------
-        function vals = GetStimValSettings(obj)
-            vals = obj.procStream.input.GetStimValSettings();
+        function vals = GetstimStatusSettings(obj)
+            vals = obj.procStream.input.GetstimStatusSettings();
         end        
         
         

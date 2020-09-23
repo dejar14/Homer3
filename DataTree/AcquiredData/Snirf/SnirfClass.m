@@ -31,6 +31,7 @@ classdef SnirfClass < AcqDataClass & FileLoadSaveClass
             %   obj = SnirfClass(filename, dataStorageScheme);
             %   obj = SnirfClass(dotnirs);
             %   obj = SnirfClass(dotnirs, numdatabllocks);
+            %   obj = SnirfClass(data);
             %   obj = SnirfClass(data, stim);
             %   obj = SnirfClass(data, stim, probe);
             %   obj = SnirfClass(data, stim, probe, aux);
@@ -163,17 +164,22 @@ classdef SnirfClass < AcqDataClass & FileLoadSaveClass
                     obj.metaDataTags   = MetaDataTagsClass();
                     
                     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+                    % obj = SnirfClass(data);
                     % obj = SnirfClass(data, stim);
                     % obj = SnirfClass(data, stim, probe);
                     % obj = SnirfClass(data, stim, probe, aux);
                     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
                 elseif isa(varargin{1}, 'DataClass')
                     
-                    % obj = SnirfClass(data, stim);
+                    % obj = SnirfClass(data);
                     data = varargin{1};
                     obj.SetData(data);
-                    stim = varargin{2};
-                    obj.SetStim(stim);
+                    
+                    % obj = SnirfClass(data, stim);
+                    if nargin>1
+                        stim = varargin{2};
+                        obj.SetStim(stim);
+                    end
                     
                     % obj = SnirfClass(data, stim, probe);
                     if nargin>2
@@ -956,9 +962,12 @@ classdef SnirfClass < AcqDataClass & FileLoadSaveClass
         
         
         % ---------------------------------------------------------
-        function s = GetStims(obj, t)
+        function s = GetStims(obj, t)  % TODO rename GetStimAmplitudes
+            % Takes array of time points t and returns array the same size
+            % valued with stimulus amplitudes at the nearest time point to
+            % their onset
             s = zeros(length(t), length(obj.stim));
-            for ii=1:length(obj.stim)
+            for ii=1:length(obj.stim)  % For each stimulus condition
                 [ts, v] = obj.stim(ii).GetStim();
                 [~, k] = nearest_point(t, ts);
                 if isempty(k)
@@ -1291,19 +1300,19 @@ classdef SnirfClass < AcqDataClass & FileLoadSaveClass
         
         
         % ----------------------------------------------------------------------------------
-        function SetStimValues(obj, icond, vals)
-            obj.stim(icond).SetValues(vals);
+        function SetStimAmplitudes(obj, icond, amps)
+            obj.stim(icond).SetAmplitudes(amps);
         end
         
         
         
         % ----------------------------------------------------------------------------------
-        function vals = GetStimValues(obj, icond)
+        function vals = GetStimAmplitudes(obj, icond)
             if icond>length(obj.stim)
                 vals = [];
                 return;
             end
-            vals = obj.stim(icond).GetValues();
+            vals = obj.stim(icond).GetAmplitudes();
         end
         
         

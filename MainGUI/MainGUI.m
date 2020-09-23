@@ -1065,8 +1065,8 @@ end
 %%% Plot stim marks. This has to be done before plotting exclude time
 %%% patches because stim legend doesn't work otherwise.
 t          = procElem.GetTimeCombined();
-s          = procElem.GetStims(t);
-stimVals   = procElem.GetStimValSettings();
+s          = procElem.GetStimStatus(t);
+stimVals   = procElem.GetstimStatusSettings();
 CondColTbl = procElem.CondColTbl;
 
 % Plot included and excluded stims
@@ -1499,8 +1499,6 @@ else
     MainGUI_EnableDisablePlotEditMode(handles, 'on');
 end
 Display(handles, hObject);
-
-
 
 % --------------------------------------------------------------------
 function checkboxShowExcludedTimeManual_Callback(hObject, eventdata, handles)

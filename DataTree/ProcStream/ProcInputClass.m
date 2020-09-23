@@ -4,14 +4,15 @@ classdef ProcInputClass < handle
     % of acquisition data or is derived from acquisition data but not stored there. 
     %
     properties
+        errmargin;               % Margin of error used when seeking stims given some time point (default 1e-3)
         tIncMan;                 % Manually included/excluded time points
         mlActMan;                % Manually included/excluded channels
         mlVis;                   % Channels which are visible or invisible in axesData
         acquired;                % Modifiable acquisition parameters initally copied from acquisition files
-        stimValSettings;         % Derived stim values 
+        stimStatus;              % Flag denoting whether stim is enabled or disabled
+        stimStatusSettings;      % Values this flag can take
         misc;
     end
-    
     
     methods
         
@@ -20,11 +21,12 @@ classdef ProcInputClass < handle
             if nargin==1
                 copyOptions = '';
             end
+            obj.errmargin = 1e-3;
             obj.tIncMan = {};
             obj.mlActMan = {};
             obj.mlVis = {};
             obj.misc = [];
-            obj.stimValSettings = struct('none',0, 'incl',1, 'excl_manual',-1, 'excl_auto',-2);
+            obj.stimStatusSettings = struct('none',0, 'incl',1, 'excl_manual',-1, 'excl_auto',-2);  % TODO: remove
             if nargin==0
                 return;
             end
@@ -32,6 +34,7 @@ classdef ProcInputClass < handle
                 return;
             end
             obj.acquired = acquired.CopyMutable(copyOptions);
+            obj.InitStimStatus();
         end
         
                 
@@ -51,6 +54,9 @@ classdef ProcInputClass < handle
             end
             if ~isempty(obj2.mlVis)
                 obj.mlVis = obj2.mlVis;
+            end
+            if ~isempty(obj2.stimStatus)
+                obj.stimStatus = obj2.stimStatus;
             end
             fields = properties(obj.misc);
             for ii=1:length(fields)
@@ -128,7 +134,7 @@ classdef ProcInputClass < handle
             nbytes(1) = sizeof(obj.tIncMan);
             nbytes(2) = sizeof(obj.mlActMan);
             nbytes(3) = sizeof(obj.misc);
-            nbytes(4) = sizeof(obj.stimValSettings);
+            nbytes(4) = sizeof(obj.stimStatusSettings);
             if isempty(obj.acquired)
                 nbytes(5) = 0;
             else
@@ -160,10 +166,21 @@ classdef ProcInputClass < handle
     methods
         
         % ----------------------------------------------------------------------------------
-        function vals = GetStimValSettings(obj)
-            vals = obj.stimValSettings;
+        function vals = GetstimStatusSettings(obj)
+            vals = obj.stimStatusSettings;
         end
         
+        % ----------------------------------------------------------------------------------
+        function status = GetStimStatus(obj, icond)
+            if ~exist('icond', 'var')
+                status = obj.stimStatus(1);
+            end
+            if isempty(obj.stimStatus)
+                status = [];
+                return
+            end
+            status = obj.stimStatus{icond};
+        end
         
         % ----------------------------------------------------------------------------------
         function SetTincMan(obj, val, iBlk)
@@ -223,7 +240,7 @@ classdef ProcInputClass < handle
             ml = []; 
         end
         end
-        
+
         
         % ----------------------------------------------------------------------------------
         function SetMeasListVis(obj, ml, iBlk)
@@ -249,16 +266,57 @@ classdef ProcInputClass < handle
     % Methods for getting/setting editable acquisition parameters such as
     % stimulus and source/detector geometry
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    methods
+    methods  
         
         % ----------------------------------------------------------------------------------
-        function s = GetStims(obj, t)
+        function InitStimStatus(obj)
+            % Initialize stimStatus matrix based on acq file  
+            stim = obj.acquired.GetStim();
+            obj.stimStatus = {};
+            for i = 1:length(stim)
+                data = stim(i).GetData();
+                if ~isempty(data)
+                   obj.stimStatus{i} = [data(:, 1), ones(size(data, 1), 1)]; 
+                else
+                   obj.stimStatus{i} = []; 
+                end
+            end
+        end
+        
+        % ----------------------------------------------------------------------------------
+        function s = GetStimStatusTimeSeries(obj, t)
+            % Takes array of time points t and returns array the same size
+            % valued with stimulus status flags at the nearest time point to
+            % their onset
             if nargin==1
                 t = [];
             end
-            s = obj.acquired.GetStims(t);
+            if isempty(obj.stimStatus)
+                s = [];
+                return
+            end
+            stim = obj.acquired.GetStim();
+            s = zeros(length(t), length(stim));
+            for i = 1:length(obj.stimStatus)  % For each stimulus condition in stimStatus
+                data = stim(i).GetData();
+                status = obj.stimStatus{i};
+                if ~isempty(data) && ~isempty(status)
+                    for j = 1:length(data(:,1))
+                         k = find(abs(t - data(j,1)) < obj.errmargin);
+                         s(k, i) = status(j, 2);
+                    end            
+                end
+            end
         end
         
+        
+        % ----------------------------------------------------------------------------------
+        function a = GetStimAmplitudeTimeSeries(obj, t)
+            if nargin==1
+                t = [];
+            end
+            a = obj.acquired.GetStims(t);
+        end
         
         % ----------------------------------------------------------------------------------
         function AddStims(obj, tPts, condition)
@@ -268,7 +326,40 @@ classdef ProcInputClass < handle
             if isempty(condition)
                 return;
             end
+            stim = obj.acquired.GetStim();
+            % Need to ensure proper stimStatus order after calls to
+            % SortStims in acquired object
+            names_pre = {stim.name};
+            % Add the stims to the acq files
             obj.acquired.AddStims(tPts, condition);
+            stim = obj.acquired.GetStim();
+            names_post = {stim.name};
+            tmp = obj.stimStatus;
+            obj.stimStatus = {};
+            % Reorder existing stims
+            for i = 1:length(names_post)
+                if strcmp(names_post{i}, condition)  % If this is the condition of the added stim
+                    j = find(strcmp(condition, names_pre));
+                    if ~isempty(j)
+                        obj.stimStatus{i} = tmp{j};
+                    else
+                        obj.stimStatus{i} = [];
+                    end
+                else
+                    for j = 1:length(names_pre)
+                        if strcmp(names_post{i}, names_pre{j})
+                           obj.stimStatus{i} = tmp{j};
+                        end
+                    end
+                end
+            end
+            % Init status for new stim
+            for i = 1:length(obj.stimStatus)
+                if strcmp(condition, stim(i).GetName())
+                    obj.stimStatus{i} = [obj.stimStatus{i}; [tPts, ones(length(tPts),1)]];
+                    return
+                end
+            end
         end
 
         
@@ -277,8 +368,26 @@ classdef ProcInputClass < handle
             if ~exist('tPts','var') || isempty(tPts)
                 return;
             end
-            if ~exist('condition','var')
+            if ~exist('condition','var') || strcmp(condition, '')
                 condition = '';
+                stim = obj.acquired.GetStim();
+                % Find all stims for any conditions which match the time points and 
+                % remove the row
+                for i = 1:length(stim)  % For each condition
+                    data = stim(i).GetData();
+                    if ~isempty(data)
+                        k = [];
+                        for j=1:length(tPts)  % For each selected time point, search for nearby stims
+                            k = [k, find( abs(data(:,1)-tPts(j)) < obj.errmargin )]; %#ok<AGROW>
+                        end
+                        % Remove stims from stimStatus property too
+                        status = obj.stimStatus{i};
+                        if ~isempty(status)
+                            status(k, :) = [];
+                            obj.stimStatus{i} = status; 
+                        end
+                    end
+                end
             end
             obj.acquired.DeleteStims(tPts, condition);
         end
@@ -289,10 +398,35 @@ classdef ProcInputClass < handle
             if ~exist('tPts','var') || isempty(tPts)
                 return;
             end
-            if ~exist('condition','var')
-                condition = '';
+            
+            stim = obj.acquired.GetStim();
+            
+            if ~exist('condition','var') || strcmp(condition, '')
+                stim = obj.acquired.GetStim();
+                % Find all stims for any conditions which match the time points and 
+                % flip it's value.
+                for i = 1:length(stim)  % For each condition
+                    data = stim(i).GetData();
+                    if ~isempty(data)
+                        k = [];
+                        for j=1:length(tPts)  % For each selected time point, search for nearby stims
+                            k = [k, find( abs(data(:,1)-tPts(j)) < obj.errmargin )]; %#ok<AGROW>
+                        end
+                        % Set stim status to manually excluded
+                        status = obj.stimStatus{i};
+                        if ~isempty(status)
+                            status(k, 2) = -1 * status(k, 2);
+                            obj.stimStatus{i} = status; 
+                        end
+                    end
+                end
+            else
+                warning('Cannot toggle stims for a specific condition.')
+                return;
+%                 conditions = obj.acquired.GetConditions();
+%                 icond = find(strcmp(conditions, condition));
+%                 data = stim(icond).GetData();
             end
-            obj.acquired.ToggleStims(tPts, condition);
         end
         
         
@@ -312,7 +446,7 @@ classdef ProcInputClass < handle
         function [tpts, duration, vals] = GetStimData(obj, icond)
             tpts     = obj.GetStimTpts(icond);
             duration = obj.GetStimDuration(icond);
-            vals     = obj.GetStimValues(icond);
+            amps     = obj.GetStimAmplitudes(icond);
         end
         
     
@@ -347,17 +481,17 @@ classdef ProcInputClass < handle
         
         
         % ----------------------------------------------------------------------------------
-        function SetStimValues(obj, icond, vals)
-            obj.acquired.SetStimValues(icond, vals);
+        function SetStimAmplitudes(obj, icond, amps)
+            obj.acquired.SetStimAmplitudes(icond, amps);
         end
         
     
         % ----------------------------------------------------------------------------------
-        function vals = GetStimValues(obj, icond)
+        function amps = GetStimAmplitudes(obj, icond)
             if ~exist('icond','var')
                 icond=1;
             end
-            vals = obj.acquired.GetStimValues(icond);
+            amps = obj.acquired.GetStimAmplitudes(icond);
         end
         
         
@@ -377,47 +511,40 @@ classdef ProcInputClass < handle
         
         
         % ----------------------------------------------------------------------------------
-        function SetStims_MatInput(obj, s, t, CondNames)
+        function SetStims_MatInput(obj, s, t, CondNames)  % Deprecated
             obj.acquired.SetStims_MatInput(s, t);
         end
         
         
         % ----------------------------------------------------------------------------------
-        function StimReject(obj, t, iBlk)
-            tRange = [-2, 10];
-            
-            s = obj.acquired.GetStims(t);
-            dt = (t(end)-t(1))/length(t);
-            tRangeIdx = floor(tRange(1)/dt):ceil(tRange(2)/dt);
-            smax = max(s,[],2);
-            lstS = find(smax==1);
-            for iS = 1:size(lstS,1)
-                lst = round(min(max(lstS(iS) + tRangeIdx,1),length(t)));
-                if ~isempty(obj.tIncMan{iBlk}) && min(obj.tIncMan{iBlk}(lst))==0
-                    s(lstS(iS),:) = -1*abs(s(lstS(iS),:));
-                end
-            end
-            obj.acquired.SetStims_MatInput(s, t);
-        end
-        
-        
-        % ----------------------------------------------------------------------------------
-        function StimInclude(obj, t, iBlk)
-            tRange = [-2, 10];
-            
-            s = obj.acquired.GetStims(t);
-            dt = (t(end)-t(1))/length(t);
-            tRangeIdx = floor(tRange(1)/dt):ceil(tRange(2)/dt);
-            for iC = 1:size(s,2)
-                lstS = find(s(:,iC)<0);
-                for iS = 1:size(lstS,1)
-                    lst = round(min(max(lstS(iS) + tRangeIdx,1),length(t)));
-                    if ~isempty(obj.tIncMan{iBlk}) && min(obj.tIncMan{iBlk}(lst))==1
-                        s(lstS(iS),iC) = 1;
+        function StimReject(obj, t, ~)
+            % TODO implement 3rd argument iBlk
+            iBlk = 1;
+            for i = 1:length(obj.stimStatus)  % For each stim condition
+                enabled = find(obj.stimStatus{i}(:, 2) == 1);
+                for j = 1:length(enabled)
+                    k = find(abs(t - obj.stimStatus{i}(enabled(j), 1)) < obj.errmargin);
+                    if ~obj.tIncMan{iBlk}(k)
+                        obj.stimStatus{i}(enabled(j), 2) = -1;
                     end
                 end
             end
-            obj.acquired.SetStims_MatInput(s, t);
+        end
+        
+        
+        % ----------------------------------------------------------------------------------
+        function StimInclude(obj, t, ~)
+            % TODO implement 3rd argument iBlk
+            iBlk = 1;
+            for i = 1:length(obj.stimStatus)  % For each stim condition
+                disabled = find(obj.stimStatus{i}(:, 2) == -1);
+                for j = 1:length(disabled)
+                    k = find(abs(t - obj.stimStatus{i}(disabled(j), 1)) < obj.errmargin);
+                    if obj.tIncMan{iBlk}(k)
+                        obj.stimStatus{i}(disabled(j), 2) = 1;
+                    end
+                end
+            end
         end
         
         
@@ -442,9 +569,27 @@ classdef ProcInputClass < handle
             if ~exist('newname','var')  || ~ischar(newname)
                 return;
             end
+            % Reorder stimStatus
+            stim = obj.acquired.GetStim();
+            names_pre = {stim.name};
             obj.acquired.RenameCondition(oldname, newname);
+            stim = obj.acquired.GetStim();
+            names_post = {stim.name};
+            tmp = obj.stimStatus;
+            obj.stimStatus = {};
+            for i = 1:length(names_post)
+               if strcmp(names_post{i}, newname)
+                   j = find(strcmp(oldname, names_pre));
+                   obj.stimStatus{i} = tmp{j};
+               else
+                   for j = 1:length(names_pre)
+                        if strcmp(names_post{i}, names_pre{j})
+                           obj.stimStatus{i} = tmp{j};
+                        end
+                   end
+               end
+            end
         end
     end   
-    
 end
 
